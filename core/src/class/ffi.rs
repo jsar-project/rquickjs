@@ -398,7 +398,9 @@ impl VTable {
             match C::exotic_get_own_property(&this_ptr.as_ref().data, &ctx, atom) {
                 Ok(Some(property)) => {
                     if !desc.is_null() {
-                        let mut flags: qjs::c_int = 0;
+                        let mut flags: qjs::c_int = (qjs::JS_PROP_HAS_CONFIGURABLE
+                            | qjs::JS_PROP_HAS_ENUMERABLE)
+                            as qjs::c_int;
                         if property.configurable {
                             flags |= qjs::JS_PROP_CONFIGURABLE as qjs::c_int;
                         }
@@ -414,6 +416,7 @@ impl VTable {
                             (*desc).value = qjs::JS_UNDEFINED;
                         } else {
                             flags |= qjs::JS_PROP_HAS_VALUE as qjs::c_int;
+                            flags |= qjs::JS_PROP_HAS_WRITABLE as qjs::c_int;
                             if property.writable {
                                 flags |= qjs::JS_PROP_WRITABLE as qjs::c_int;
                             }
