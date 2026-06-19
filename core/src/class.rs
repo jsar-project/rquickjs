@@ -729,7 +729,7 @@ mod test {
                     Function::new(
                         ctx.clone(),
                         |this: This<Class<DebugPrinter<D>>>| -> crate::Result<String> {
-                            Ok(format!("{:?}", &this.0.borrow().d))
+                            Ok(format!("{:?}", this.0.borrow().d))
                         },
                     ),
                 )?;
@@ -998,6 +998,7 @@ mod test {
                 println!("Got atom: {}", atom.to_string()?);
                 if atom.to_string()? == "hello"
                     || atom.to_string()? == "i"
+                    || atom.to_string()? == "accessor"
                     || atom.to_string()? == "toString"
                 {
                     return Ok(true);
@@ -1023,14 +1024,31 @@ mod test {
             ) -> crate::Result<Option<super::PropertyDescriptor<'js>>> {
                 let name = atom.to_string()?;
                 if name == "hello" || name == "i" {
-                    let value = if name == "hello" {
-                        "world".into_js(ctx)?
+                    let (value, writable) = if name == "hello" {
+                        ("world".into_js(ctx)?, false)
                     } else {
-                        this.borrow().i.into_js(ctx)?
+                        (this.borrow().i.into_js(ctx)?, true)
                     };
                     Ok(Some(super::PropertyDescriptor::new_value(
-                        value, true, true, false,
+                        value, true, true, writable,
                     )))
+                } else if name == "accessor" {
+                    let getter = Function::new(ctx.clone(), || {
+                        Ok::<&'static str, crate::Error>("accessor-value")
+                    })?
+                    .into_value();
+                    let setter =
+                        Function::new(ctx.clone(), |_value: String| Ok::<(), crate::Error>(()))?
+                            .into_value();
+                    Ok(Some(super::PropertyDescriptor {
+                        value: crate::Value::new_undefined(ctx.clone()),
+                        getter,
+                        setter,
+                        configurable: true,
+                        enumerable: true,
+                        writable: false,
+                        is_getset: true,
+                    }))
                 } else {
                     Ok(None)
                 }
@@ -1047,6 +1065,10 @@ mod test {
                     },
                     super::PropertyName {
                         atom: crate::Atom::from_str(ctx.clone(), "i")?,
+                        is_enumerable: true,
+                    },
+                    super::PropertyName {
+                        atom: crate::Atom::from_str(ctx.clone(), "accessor")?,
                         is_enumerable: true,
                     },
                 ])
@@ -1096,6 +1118,7 @@ mod test {
                 assert(exotic?.toString() === 'class Exotic { [native code] }', `exotic.toString() should be 'class Exotic { [native code] }' but is ${exotic?.toString()}`);
                 assert('i' in exotic, 'i should be in exotic');
                 assert('hello' in exotic, 'hello should be in exotic');
+                assert('accessor' in exotic, 'accessor should be in exotic');
                 assert(!('foo' in exotic), 'foo should not be in exotic');
 
                 try {
@@ -1118,13 +1141,17 @@ mod test {
 
                 // Test Object.getOwnPropertyNames() (uses get_own_property_names)
                 let ownNames = Object.getOwnPropertyNames(exotic);
-                assert(ownNames.length === 2, `getOwnPropertyNames should return 2, got ${ownNames.length}`);
+                assert(ownNames.length === 3, `getOwnPropertyNames should return 3, got ${ownNames.length}`);
                 assert(ownNames.includes('hello'), 'getOwnPropertyNames should include hello');
                 assert(ownNames.includes('i'), 'getOwnPropertyNames should include i');
+                assert(ownNames.includes('accessor'), 'getOwnPropertyNames should include accessor');
 
                 // Test Object.keys() (uses get_own_property_names + get_own_property)
                 let keys = Object.keys(exotic);
-                assert(keys.length === 2, `Object.keys should return 2 keys, got ${keys.length}`);
+                assert(keys.length === 3, `Object.keys should return 3 keys, got ${keys.length}`);
+                assert(keys.includes('hello'), 'Object.keys should include hello');
+                assert(keys.includes('i'), 'Object.keys should include i');
+                assert(keys.includes('accessor'), 'Object.keys should include accessor');
 
                 // Test Object.getOwnPropertyDescriptor() (uses get_own_property)
                 let desc = Object.getOwnPropertyDescriptor(exotic, 'hello');
@@ -1133,6 +1160,23 @@ mod test {
                 assert(desc.configurable === true, 'hello should be configurable');
                 assert(desc.enumerable === true, 'hello should be enumerable');
                 assert(desc.writable === false, 'hello should not be writable');
+
+                let writableDesc = Object.getOwnPropertyDescriptor(exotic, 'i');
+                assert(writableDesc !== undefined, 'descriptor for i should exist');
+                assert(writableDesc.value === 42, `descriptor value should be 42, got ${writableDesc.value}`);
+                assert(writableDesc.configurable === true, 'i should be configurable');
+                assert(writableDesc.enumerable === true, 'i should be enumerable');
+                assert(writableDesc.writable === true, 'i should be writable');
+
+                let accessorDesc = Object.getOwnPropertyDescriptor(exotic, 'accessor');
+                assert(accessorDesc !== undefined, 'descriptor for accessor should exist');
+                assert(accessorDesc.value === undefined, 'accessor should not have a value field');
+                assert(typeof accessorDesc.get === 'function', 'accessor getter should be a function');
+                assert(typeof accessorDesc.set === 'function', 'accessor setter should be a function');
+                assert(accessorDesc.get() === 'accessor-value', 'accessor getter should return accessor-value');
+                assert(accessorDesc.configurable === true, 'accessor should be configurable');
+                assert(accessorDesc.enumerable === true, 'accessor should be enumerable');
+                assert(accessorDesc.writable === undefined, 'accessor should not have a writable field');
 
                 // Non-existent property returns undefined descriptor
                 assert(Object.getOwnPropertyDescriptor(exotic, 'nonexistent') === undefined, 'nonexistent should be undefined');
