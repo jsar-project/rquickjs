@@ -407,10 +407,13 @@ impl VTable {
                         }
                         if property.is_getset {
                             flags |= qjs::JS_PROP_GETSET as qjs::c_int;
+                            flags |= qjs::JS_PROP_HAS_GET as qjs::c_int;
+                            flags |= qjs::JS_PROP_HAS_SET as qjs::c_int;
                             (*desc).getter = property.getter.into_js_value();
                             (*desc).setter = property.setter.into_js_value();
                             (*desc).value = qjs::JS_UNDEFINED;
                         } else {
+                            flags |= qjs::JS_PROP_HAS_VALUE as qjs::c_int;
                             if property.writable {
                                 flags |= qjs::JS_PROP_WRITABLE as qjs::c_int;
                             }
