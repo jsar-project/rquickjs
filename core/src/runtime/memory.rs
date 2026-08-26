@@ -27,21 +27,30 @@ impl ExternalMemoryTracker {
     }
 
     fn add(&self, bytes: usize) {
-        self.inner
-            .bytes
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
-                current.checked_add(bytes)
-            })
-            .expect("external memory accounting overflow");
+        update_bytes(&self.inner.bytes, |current| {
+            current
+                .checked_add(bytes)
+                .expect("external memory accounting overflow")
+        });
     }
 
     fn subtract(&self, bytes: usize) {
-        self.inner
-            .bytes
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
-                current.checked_sub(bytes)
-            })
-            .expect("external memory accounting underflow");
+        update_bytes(&self.inner.bytes, |current| {
+            current
+                .checked_sub(bytes)
+                .expect("external memory accounting underflow")
+        });
+    }
+}
+
+fn update_bytes(bytes: &AtomicUsize, update: impl Fn(usize) -> usize) {
+    let mut current = bytes.load(Ordering::Acquire);
+    loop {
+        let next = update(current);
+        match bytes.compare_exchange_weak(current, next, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => return,
+            Err(actual) => current = actual,
+        }
     }
 }
 
