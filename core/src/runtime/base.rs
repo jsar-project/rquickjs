@@ -1,7 +1,8 @@
 //! QuickJS runtime related types.
 
 use super::{
-    opaque::Opaque, raw::RawRuntime, InterruptHandler, MemoryUsage, PromiseHook, RejectionTracker,
+    opaque::Opaque, raw::RawRuntime, ExternalMemoryAllocation, InterruptHandler, MemoryUsage,
+    PromiseHook, RejectionTracker, RuntimeMemoryUsage,
 };
 use crate::allocator::Allocator;
 #[cfg(feature = "loader")]
@@ -166,6 +167,16 @@ impl Runtime {
         unsafe { self.inner.lock().memory_usage() }
     }
 
+    /// Get a per-runtime memory report including attributed host allocations.
+    pub fn memory_usage_report(&self) -> RuntimeMemoryUsage {
+        unsafe { self.inner.lock().memory_usage_report() }
+    }
+
+    /// Attribute a host allocation to this runtime until the returned value is dropped.
+    pub fn track_external_memory(&self, bytes: usize) -> ExternalMemoryAllocation {
+        self.inner.lock().track_external_memory(bytes)
+    }
+
     /// Test for pending jobs
     ///
     /// Returns true when at least one job is pending.
@@ -216,6 +227,29 @@ mod test {
         rt.set_memory_limit(0xFFFF);
         rt.set_gc_threshold(0xFF);
         rt.run_gc();
+    }
+
+    #[test]
+    fn memory_usage_report_tracks_external_allocations() {
+        let rt = Runtime::new().unwrap();
+        let other_rt = Runtime::new().unwrap();
+        let baseline = rt.memory_usage_report();
+        assert_eq!(baseline.external_bytes, 0);
+        assert_eq!(
+            baseline.total_attributed_bytes(),
+            baseline.allocator_bytes()
+        );
+
+        let mut allocation = rt.track_external_memory(1_024);
+        assert_eq!(allocation.bytes(), 1_024);
+        assert_eq!(rt.memory_usage_report().external_bytes, 1_024);
+        assert_eq!(other_rt.memory_usage_report().external_bytes, 0);
+
+        allocation.resize(4_096);
+        assert_eq!(rt.memory_usage_report().external_bytes, 4_096);
+
+        drop(allocation);
+        assert_eq!(rt.memory_usage_report().external_bytes, 0);
     }
 
     #[test]

@@ -1,5 +1,8 @@
-use crate::{qjs, Ctx, Error, FromJs, IntoJs, JsLifetime, Object, Result, Value};
-use alloc::vec::Vec;
+use crate::{
+    qjs, runtime::ExternalMemoryAllocation, Ctx, Error, FromJs, IntoJs, JsLifetime, Object, Result,
+    Value,
+};
+use alloc::{boxed::Box, vec::Vec};
 use core::{
     ffi::c_void,
     fmt,
@@ -47,17 +50,28 @@ unsafe impl<'js> JsLifetime<'js> for ArrayBuffer<'js> {
 impl<'js> ArrayBuffer<'js> {
     /// Create array buffer from vector data
     pub fn new<T: Copy>(ctx: Ctx<'js>, src: impl Into<Vec<T>>) -> Result<Self> {
+        struct ExternalBuffer {
+            capacity: usize,
+            _memory: ExternalMemoryAllocation,
+        }
+
         let mut src = ManuallyDrop::new(src.into());
         let ptr = src.as_mut_ptr();
         let capacity = src.capacity();
         let size = src.len() * size_of::<T>();
 
+        let external = Box::new(ExternalBuffer {
+            capacity,
+            _memory: ctx.track_external_memory(capacity.saturating_mul(size_of::<T>())),
+        });
+        let external = Box::into_raw(external);
+
         extern "C" fn drop_raw<T>(_rt: *mut qjs::JSRuntime, opaque: *mut c_void, ptr: *mut c_void) {
             let ptr = ptr as *mut T;
-            let capacity = opaque as usize;
+            let external = unsafe { Box::from_raw(opaque.cast::<ExternalBuffer>()) };
             // reconstruct vector in order to free data
             // the length of actual data does not matter for copyable types
-            unsafe { Vec::from_raw_parts(ptr, capacity, capacity) };
+            unsafe { Vec::from_raw_parts(ptr, external.capacity, external.capacity) };
         }
 
         Ok(Self(Object(unsafe {
@@ -66,12 +80,13 @@ impl<'js> ArrayBuffer<'js> {
                 ptr as _,
                 size as _,
                 Some(drop_raw::<T>),
-                capacity as _,
+                external.cast(),
                 false,
             );
             ctx.handle_exception(val).inspect_err(|_| {
                 // don't forget to free data when error occurred
                 Vec::from_raw_parts(ptr, capacity, capacity);
+                drop(Box::from_raw(external));
             })?;
             Value::from_js_value(ctx, val)
         })))
@@ -253,6 +268,27 @@ impl<'js> Object<'js> {
 #[cfg(test)]
 mod test {
     use crate::*;
+
+    #[test]
+    fn external_vector_capacity_is_attributed_to_runtime() {
+        test_with(|ctx| {
+            let baseline = unsafe { ctx.get_opaque().external_memory_bytes() };
+            let mut data = Vec::<u8>::with_capacity(128);
+            data.extend_from_slice(&[1, 2, 3, 4]);
+
+            let value = ArrayBuffer::new(ctx.clone(), data).unwrap();
+            assert_eq!(
+                unsafe { ctx.get_opaque().external_memory_bytes() },
+                baseline + 128
+            );
+
+            drop(value);
+            assert_eq!(
+                unsafe { ctx.get_opaque().external_memory_bytes() },
+                baseline
+            );
+        });
+    }
 
     #[test]
     fn from_javascript_i8() {

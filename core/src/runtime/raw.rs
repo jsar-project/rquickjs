@@ -12,7 +12,11 @@ use crate::{
     Ctx, Error, Result, Value,
 };
 
-use super::{opaque::Opaque, InterruptHandler, PromiseHook, PromiseHookType, RejectionTracker};
+use super::{
+    memory::{ExternalMemoryAllocation, RuntimeMemoryUsage},
+    opaque::Opaque,
+    InterruptHandler, PromiseHook, PromiseHookType, RejectionTracker,
+};
 
 const DUMP_BYTECODE_FINAL: u64 = 0x01;
 const DUMP_BYTECODE_PASS2: u64 = 0x02;
@@ -112,6 +116,7 @@ pub(crate) struct RawRuntime {
 
     #[allow(dead_code)]
     pub allocator: Option<AllocatorHolder>,
+    allocator_usable_size_available: bool,
     #[cfg(feature = "loader")]
     #[allow(dead_code)]
     pub loader: Option<LoaderHolder>,
@@ -158,6 +163,13 @@ impl RawRuntime {
             rt,
             info: None,
             allocator: None,
+            allocator_usable_size_available: cfg!(any(
+                target_vendor = "apple",
+                target_os = "windows",
+                target_os = "linux",
+                target_os = "android",
+                target_os = "freebsd"
+            )),
             #[cfg(feature = "loader")]
             loader: None,
         })
@@ -186,6 +198,7 @@ impl RawRuntime {
             rt,
             info: None,
             allocator: Some(allocator),
+            allocator_usable_size_available: true,
             #[cfg(feature = "loader")]
             loader: None,
         })
@@ -288,6 +301,18 @@ impl RawRuntime {
         let mut stats = mem::MaybeUninit::uninit();
         qjs::JS_ComputeMemoryUsage(self.rt.as_ptr(), stats.as_mut_ptr());
         stats.assume_init()
+    }
+
+    pub unsafe fn memory_usage_report(&mut self) -> RuntimeMemoryUsage {
+        RuntimeMemoryUsage {
+            engine: self.memory_usage(),
+            external_bytes: self.get_opaque().external_memory_bytes(),
+            allocator_usable_size_available: self.allocator_usable_size_available,
+        }
+    }
+
+    pub fn track_external_memory(&self, bytes: usize) -> ExternalMemoryAllocation {
+        self.get_opaque().track_external_memory(bytes)
     }
 
     #[allow(clippy::unnecessary_cast)]

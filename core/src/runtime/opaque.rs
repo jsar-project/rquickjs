@@ -5,6 +5,7 @@ use crate::{
 
 use super::{
     exotic::ExoticMethodsHolder,
+    memory::{ExternalMemoryAllocation, ExternalMemoryTracker},
     userdata::{UserDataGuard, UserDataMap},
     InterruptHandler, PromiseHook, PromiseHookType, RejectionTracker, UserDataError,
 };
@@ -56,6 +57,8 @@ pub(crate) struct Opaque<'js> {
 
     userdata: UserDataMap,
 
+    external_memory: ExternalMemoryTracker,
+
     #[cfg(feature = "futures")]
     spawner: Option<UnsafeCell<Spawner>>,
 
@@ -82,6 +85,8 @@ impl<'js> Opaque<'js> {
             prototypes: UnsafeCell::new(HashMap::new()),
 
             userdata: UserDataMap::default(),
+
+            external_memory: ExternalMemoryTracker::default(),
 
             _marker: PhantomData,
 
@@ -199,6 +204,14 @@ impl<'js> Opaque<'js> {
         U::Changed<'static>: Any,
     {
         self.userdata.get()
+    }
+
+    pub fn track_external_memory(&self, bytes: usize) -> ExternalMemoryAllocation {
+        self.external_memory.allocate(bytes)
+    }
+
+    pub fn external_memory_bytes(&self) -> usize {
+        self.external_memory.bytes()
     }
 
     pub fn set_promise_hook(&self, promise_hook: Option<PromiseHook>) {

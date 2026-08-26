@@ -508,6 +508,11 @@ impl<'js> Ctx<'js> {
         unsafe { self.get_opaque().get_userdata() }
     }
 
+    /// Attribute a host allocation to this runtime until the returned value is dropped.
+    pub fn track_external_memory(&self, bytes: usize) -> crate::runtime::ExternalMemoryAllocation {
+        unsafe { self.get_opaque().track_external_memory(bytes) }
+    }
+
     /// Returns the pointer to the C library context.
     pub fn as_raw(&self) -> NonNull<qjs::JSContext> {
         self.ctx

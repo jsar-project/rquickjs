@@ -14,7 +14,8 @@ use async_lock::Mutex;
 
 use super::{
     opaque::Opaque, raw::RawRuntime, schedular::SchedularPoll, spawner::DriveFuture,
-    InterruptHandler, MemoryUsage, PromiseHook, RejectionTracker,
+    ExternalMemoryAllocation, InterruptHandler, MemoryUsage, PromiseHook, RejectionTracker,
+    RuntimeMemoryUsage,
 };
 use crate::allocator::Allocator;
 #[cfg(feature = "loader")]
@@ -259,6 +260,16 @@ impl AsyncRuntime {
     /// Get memory usage stats
     pub async fn memory_usage(&self) -> MemoryUsage {
         unsafe { self.inner.lock().await.runtime.memory_usage() }
+    }
+
+    /// Get a per-runtime memory report including attributed host allocations.
+    pub async fn memory_usage_report(&self) -> RuntimeMemoryUsage {
+        unsafe { self.inner.lock().await.runtime.memory_usage_report() }
+    }
+
+    /// Attribute a host allocation to this runtime until the returned value is dropped.
+    pub async fn track_external_memory(&self, bytes: usize) -> ExternalMemoryAllocation {
+        self.inner.lock().await.runtime.track_external_memory(bytes)
     }
 
     /// Test for pending jobs
