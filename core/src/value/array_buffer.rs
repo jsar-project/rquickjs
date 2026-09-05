@@ -53,6 +53,11 @@ impl<'js> ArrayBuffer<'js> {
         let size = src.len() * size_of::<T>();
 
         extern "C" fn drop_raw<T>(_rt: *mut qjs::JSRuntime, opaque: *mut c_void, ptr: *mut c_void) {
+            // QuickJS calls this again with null when finalizing a detached buffer.
+            // Vec pointers are non-null even for empty allocations and zero-sized types.
+            if ptr.is_null() {
+                return;
+            }
             let ptr = ptr as *mut T;
             let capacity = opaque as usize;
             // reconstruct vector in order to free data
@@ -253,6 +258,67 @@ impl<'js> Object<'js> {
 #[cfg(test)]
 mod test {
     use crate::*;
+
+    #[test]
+    fn detach_vec_backed_buffers() {
+        let runtime = Runtime::new().unwrap();
+        let context = Context::full(&runtime).unwrap();
+        context.with(|ctx| {
+            // Include empty allocations and spare capacity as well as ordinary data.
+            for data in [Vec::new(), Vec::with_capacity(16), vec![1u32, 2, 3, 4]] {
+                let ptr = data.as_ptr();
+                let mut buffer = ArrayBuffer::new(ctx.clone(), data).unwrap();
+                assert_eq!(
+                    buffer.as_raw().unwrap().ptr.as_ptr().cast::<u32>(),
+                    ptr.cast_mut()
+                );
+                buffer.detach();
+                buffer.detach();
+                assert!(buffer.as_bytes().is_none());
+                drop(buffer);
+            }
+
+            let array = TypedArray::new(ctx.clone(), vec![1u32, 2, 3, 4]).unwrap();
+            let mut buffer = array.arraybuffer().unwrap();
+            buffer.detach();
+            assert!(array.as_bytes().is_none());
+            drop(buffer);
+            drop(array);
+        });
+        runtime.run_gc();
+    }
+
+    #[test]
+    fn transfer_vec_backed_buffers_to_empty() {
+        let runtime = Runtime::new().unwrap();
+        let context = Context::full(&runtime).unwrap();
+        context.with(|ctx| {
+            let buffer = ArrayBuffer::new(ctx.clone(), vec![1u8, 2, 3, 4]).unwrap();
+            let array = TypedArray::new(ctx.clone(), vec![1u32, 2, 3, 4]).unwrap();
+            ctx.globals().set("buffer", buffer).unwrap();
+            ctx.globals().set("array", array).unwrap();
+            let transferred: bool = ctx
+                .eval(
+                    r#"
+                (() => {
+                    const first = buffer.transfer(0);
+                    const second = array.buffer.transferToFixedLength(0);
+                    const result = buffer.detached && array.buffer.detached &&
+                        array.length === 0 && first.byteLength === 0 && second.byteLength === 0;
+                    // Keep the originals in cycles so their finalizers run during GC.
+                    buffer.self = buffer;
+                    array.self = array;
+                    buffer = null;
+                    array = null;
+                    return result;
+                })()
+            "#,
+                )
+                .unwrap();
+            assert!(transferred);
+        });
+        runtime.run_gc();
+    }
 
     #[test]
     fn from_javascript_i8() {
