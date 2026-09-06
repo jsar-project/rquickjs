@@ -1,0 +1,12 @@
+[package]
+name = "rustapp"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+rquickjs = { path = "../..", default-features = false, features = ["zephyr"] }
+zephyr = "0.1.0"

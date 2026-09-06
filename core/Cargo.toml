@@ -15,16 +15,17 @@ features = ["full-async", "doc-cfg"]
 
 [dependencies]
 rquickjs-sys = { workspace = true }
-hashbrown = { version = "0.17" }
-phf = { version = "0.13", optional = true }
-indexmap = { version = "2", optional = true }
-either = { version = "1", optional = true }
+hashbrown = { version = "0.17", default-features = false, features = ["default-hasher"] }
+phf = { version = "0.13", optional = true, default-features = false }
+indexmap = { version = "2", optional = true, default-features = false }
+either = { version = "1", optional = true, default-features = false }
 async-lock = { version = "3", optional = true, default-features = false }
-chrono = { version = "0.4", optional = true }
+chrono = { version = "0.4", optional = true, default-features = false, features = ["alloc"] }
 relative-path = { version = "2.0", optional = true, default-features = false, features = [
   "alloc",
 ] }
-half = { version = "2.7.1", optional = true }
+half = { version = "2.7.1", optional = true, default-features = false }
+spin = { version = "0.10", optional = true, default-features = false, features = ["mutex", "spin_mutex"] }
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 dlopen2 = { version = "0.8", optional = true }
@@ -44,13 +45,16 @@ trybuild = "1"
 [features]
 default = ["std"]
 
-std = ["relative-path?/std"]
+std = ["relative-path?/std", "chrono?/clock"]
 
 # Almost all features excluding "parallel" and support for async runtimes
 full = ["std", "chrono", "loader", "dyn-load", "either", "indexmap", "half"]
 
 # A version of full designed for wasm hosts without a native filesystem or dynamic loading.
 full-wasm = ["std", "chrono", "loader", "either", "indexmap", "half"]
+
+# Portable feature set for no_std hosts with a global allocator.
+full-nostd = ["chrono", "loader", "either", "indexmap", "half", "futures", "parallel", "rust-alloc"]
 
 # Almost all features excluding "parallel"
 full-async = ["full", "futures"]
@@ -64,9 +68,10 @@ chrono = ["dep:chrono"]
 # Use bindgen to generate bindings at compile-type
 # otherwise bundled bindings will be used
 bindgen = ["rquickjs-sys/bindgen"]
+zephyr = ["rquickjs-sys/zephyr"]
 
 # Enable support of parallel execution
-parallel = ["std", "tokio/rt-multi-thread"]
+parallel = ["dep:spin", "tokio/rt-multi-thread"]
 
 # Enable user-defined module loader support
 loader = ["relative-path"]
