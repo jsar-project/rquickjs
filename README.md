@@ -93,9 +93,34 @@ See below for a list of supported platforms.
 | wasm32-wasip1                  |          ✅          |     ✅     |            ✅            |
 | wasm32-wasip2                  |          ✅          |     ✅     |            ✅            |
 | wasm32-unknown-unknown         |          ✅          |     ✅*    |            ✅            |
+| thumbv7m-none-eabi (Zephyr)    |          ❌          |    ✅**    |            ✅            |
 | other                          |          ❌          |     ❌     |         Unknown          |
 
 \* `wasm32-unknown-unknown` is validated with workspace builds and a dedicated smoke example compile. Runtime embedding still depends on the host providing the generated wasm imports.
+
+\** Zephyr is validated on the `mps2/an385` QEMU board. Bindings are generated during the Zephyr build.
+
+## `no_std` and Zephyr
+
+Disable default features to use rquickjs with `no_std + alloc`. The `full-nostd` feature enables the
+portable high-level APIs, including async/futures support, macros, in-memory module loaders,
+`parallel`, and the Rust global allocator. The default feature set continues to use `std`.
+
+```toml
+rquickjs = { version = "0.11", default-features = false, features = ["full-nostd"] }
+```
+
+For Zephyr, use the `zephyr` feature. It also enables bindgen and the C integration required to use
+Zephyr's generated configuration, libc, threading primitives, and compiler toolchain.
+
+```toml
+rquickjs = { path = "../rquickjs", default-features = false, features = ["zephyr"] }
+```
+
+The [Zephyr example](examples/zephyr/README.md) runs two Zephyr threads against one runtime and
+checks promises, the pending-job queue, SharedArrayBuffer, and 8/16/32/64-bit Atomics on QEMU.
+Filesystem and dynamic-library module loading remain host facilities; use in-memory or custom
+resolvers and loaders on embedded targets.
 
 ## WebAssembly notes
 

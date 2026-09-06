@@ -92,6 +92,16 @@ impl Runtime {
         }
     }
 
+    /// Configure whether JavaScript Atomics operations may block this thread.
+    ///
+    /// This must be enabled before using `Atomics.wait`.
+    #[inline]
+    pub fn set_can_block(&self, can_block: bool) {
+        unsafe {
+            self.inner.lock().set_can_block(can_block);
+        }
+    }
+
     /// Set the module loader
     #[cfg(feature = "loader")]
     #[cfg_attr(feature = "doc-cfg", doc(cfg(feature = "loader")))]
@@ -216,6 +226,23 @@ mod test {
         rt.set_memory_limit(0xFFFF);
         rt.set_gc_threshold(0xFF);
         rt.run_gc();
+    }
+
+    #[test]
+    fn atomics_wait_can_be_enabled() {
+        let rt = Runtime::new().unwrap();
+        rt.set_can_block(true);
+        let ctx = crate::Context::full(&rt).unwrap();
+        ctx.with(|ctx| {
+            let result: String = ctx
+                .eval(
+                    r#"Atomics.wait(
+                        new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1
+                    )"#,
+                )
+                .unwrap();
+            assert_eq!(result, "timed-out");
+        });
     }
 
     #[test]

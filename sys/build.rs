@@ -111,12 +111,17 @@ fn main() {
         "dump-promise",
         "dump-read-object",
         "disable-assertions",
+        "zephyr",
     ];
 
     for feature in &features {
         println!("cargo:rerun-if-env-changed={}", feature_to_cargo(feature));
     }
     println!("cargo:rerun-if-env-changed=CARGO_CFG_SANITIZE");
+    println!("cargo:rerun-if-env-changed=INCLUDE_DIRS");
+    println!("cargo:rerun-if-env-changed=INCLUDE_DEFINES");
+    println!("cargo:rerun-if-env-changed=BINARY_DIR_INCLUDE_GENERATED");
+    println!("cargo:rerun-if-env-changed=ZEPHYR_SDK_INSTALL_DIR");
 
     let src_dir = Path::new("quickjs");
 
@@ -160,14 +165,13 @@ fn main() {
     let is_wasi = target_os == "wasi";
     let is_wasm_unknown =
         target_arch == "wasm32" && target_os == "unknown" && target_family == "wasm";
+    let is_zephyr = env::var_os("CARGO_FEATURE_ZEPHYR").is_some();
 
     let mut builder = cc::Build::new();
-    builder
-        .extra_warnings(false)
-        .flag_if_supported("-Wno-implicit-const-int-float-conversion")
-        //.flag("-Wno-array-bounds")
-        //.flag("-Wno-format-truncation")
-        ;
+    builder.extra_warnings(false);
+    if !is_zephyr {
+        builder.flag_if_supported("-Wno-implicit-const-int-float-conversion");
+    }
 
     match env::var("CARGO_CFG_SANITIZE").as_deref() {
         Ok("address") => {
@@ -193,6 +197,62 @@ fn main() {
     }
 
     let mut bindgen_cflags = vec![];
+
+    if is_zephyr {
+        defines.push(("__ZEPHYR__".into(), Some("1")));
+
+        let generated_include = PathBuf::from(
+            env::var("BINARY_DIR_INCLUDE_GENERATED").expect(
+                "the zephyr feature requires BINARY_DIR_INCLUDE_GENERATED from rust_cargo_application()",
+            ),
+        );
+        let autoconf = generated_include.join("autoconf.h");
+        builder.flag("-imacros").flag(&autoconf);
+        bindgen_cflags.push("-imacros".into());
+        bindgen_cflags.push(autoconf.display().to_string());
+
+        let include_dirs = env::var("INCLUDE_DIRS")
+            .expect("the zephyr feature requires INCLUDE_DIRS from rust_cargo_application()")
+            .split([' ', ';'])
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .collect::<Vec<_>>();
+        for include_dir in include_dirs {
+            builder.include(&include_dir);
+            bindgen_cflags.push(format!("-I{}", include_dir.display()));
+        }
+
+        let include_defines = env::var("INCLUDE_DEFINES")
+            .expect("the zephyr feature requires INCLUDE_DEFINES from rust_cargo_application()");
+        for definition in include_defines
+            .split([' ', ';'])
+            .filter(|value| !value.is_empty())
+        {
+            let (name, value) = definition
+                .split_once('=')
+                .map_or((definition, None), |(name, value)| (name, Some(value)));
+            builder.define(name, value);
+            bindgen_cflags.push(match value {
+                Some(value) => format!("-D{name}={value}"),
+                None => format!("-D{name}"),
+            });
+        }
+
+        if target_arch == "arm" {
+            if let Some(sdk_dir) = env::var_os("ZEPHYR_SDK_INSTALL_DIR") {
+                let toolchain = PathBuf::from(sdk_dir).join("gnu/arm-zephyr-eabi/bin");
+                builder.compiler(toolchain.join("arm-zephyr-eabi-gcc"));
+                builder.archiver(toolchain.join("arm-zephyr-eabi-ar"));
+
+                let libc_include = toolchain
+                    .parent()
+                    .expect("Zephyr ARM toolchain bin directory has no parent")
+                    .join("arm-zephyr-eabi/include");
+                builder.include(&libc_include);
+                bindgen_cflags.push(format!("-I{}", libc_include.display()));
+            }
+        }
+    }
 
     if target_os == "windows" {
         if target_env == "msvc" {

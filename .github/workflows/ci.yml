@@ -63,6 +63,10 @@ jobs:
           components: clippy
       - name: Cargo clippy
         run: cargo clippy --all --all-targets --features full-async,bindgen
+      - name: Check no_std feature sets
+        run: |
+          cargo check -p rquickjs --no-default-features
+          cargo check -p rquickjs --no-default-features --features full-nostd
 
   msrv:
     # Check to see if rquickjs builds on minimal supported Rust version.

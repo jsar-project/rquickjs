@@ -429,6 +429,10 @@ macro_rules! chrono_from_js_impls {
 
 chrono_from_js_impls! {
     Utc;
+}
+
+#[cfg(feature = "std")]
+chrono_from_js_impls! {
     Local;
 }
 

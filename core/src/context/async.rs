@@ -3,6 +3,8 @@ use super::{
     owner::{ContextOwner, DropContext},
     ContextBuilder, Intrinsic,
 };
+#[cfg(feature = "parallel")]
+use crate::runtime::DropContextPtr;
 use crate::{markers::ParallelSend, qjs, runtime::AsyncRuntime, Ctx, Error, Result};
 use core::{mem, ptr::NonNull};
 
@@ -100,9 +102,7 @@ impl DropContext for AsyncRuntime {
                 }
                 #[cfg(feature = "parallel")]
                 {
-                    self.drop_send
-                        .send(ctx)
-                        .expect("runtime should be alive while contexts life");
+                    self.drop_queue.lock().push(DropContextPtr(ctx));
                     return;
                 }
             }

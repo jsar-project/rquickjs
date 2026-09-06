@@ -1,0 +1,13 @@
+/ {
+    aliases {
+        /delete-property/ led0;
+        /delete-property/ led1;
+        /delete-property/ sw0;
+        /delete-property/ sw1;
+    };
+};
+
+/delete-node/ &led_0;
+/delete-node/ &led_1;
+/delete-node/ &user_button_0;
+/delete-node/ &user_button_1;
