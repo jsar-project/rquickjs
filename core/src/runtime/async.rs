@@ -18,9 +18,10 @@ use crate::allocator::Allocator;
 use crate::loader::{Loader, Resolver};
 #[cfg(feature = "parallel")]
 use crate::util::{AssertSendFuture, AssertSyncFuture};
+#[cfg(feature = "parallel")]
+use crate::Mut;
 use crate::{
-    context::AsyncContext, qjs, result::AsyncJobException, util::ManualPoll, Ctx, Exception, Mut,
-    Result,
+    context::AsyncContext, qjs, result::AsyncJobException, util::ManualPoll, Ctx, Exception, Result,
 };
 
 #[cfg(feature = "parallel")]
