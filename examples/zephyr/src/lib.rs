@@ -76,7 +76,7 @@ fn worker(id: usize, runtime: Runtime) {
 }
 
 #[no_mangle]
-extern "C" fn rust_main() {
+pub extern "C" fn rust_main() {
     printkln!("rquickjs: create runtime");
     let runtime = Runtime::new().expect("create QuickJS runtime");
     printkln!("rquickjs: runtime ready");

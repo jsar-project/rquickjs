@@ -64,12 +64,25 @@ impl<T: ?Sized> Mut<T> {
 
         #[cfg(all(feature = "parallel", feature = "std"))]
         {
-            self.0.lock().ok()
+            self.0.try_lock().ok()
         }
 
         #[cfg(all(feature = "parallel", not(feature = "std")))]
         {
             self.0.try_lock()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Mut;
+
+    #[test]
+    fn try_lock_returns_none_while_locked() {
+        let value = Mut::new(0);
+        let _guard = value.lock();
+
+        assert!(value.try_lock().is_none());
     }
 }

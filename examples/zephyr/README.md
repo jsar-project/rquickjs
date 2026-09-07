@@ -8,11 +8,12 @@ Zephyr 4.4.2 and SDK 1.0.1 were used for the initial port. The `mps2/an385` QEMU
 same Cortex-M3 Rust target as `qemu_cortex_m3`, with enough RAM and flash for the engine.
 
 ```sh
-source /Users/yorkie/zephyrproject/env.sh
-cd /Users/yorkie/zephyrproject
-west build -b mps2/an385 /Users/yorkie/workspace/rquickjs/examples/zephyr \
-  -d build/rquickjs-zephyr
-west build -d build/rquickjs-zephyr -t run
+export RQUICKJS_DIR="$(git rev-parse --show-toplevel)"
+export ZEPHYR_WORKSPACE=/path/to/zephyrproject
+source "$ZEPHYR_WORKSPACE/env.sh"
+west build -b mps2/an385 "$RQUICKJS_DIR/examples/zephyr" \
+  -d "$ZEPHYR_WORKSPACE/build/rquickjs-zephyr"
+west build -d "$ZEPHYR_WORKSPACE/build/rquickjs-zephyr" -t run
 ```
 
 Exit QEMU with Ctrl+A, then X.
