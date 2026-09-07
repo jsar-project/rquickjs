@@ -229,6 +229,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(target_os = "wasi", ignore = "Atomics.wait cannot block on WASI")]
     fn atomics_wait_can_be_enabled() {
         let rt = Runtime::new().unwrap();
         rt.set_can_block(true);
