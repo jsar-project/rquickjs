@@ -19,6 +19,8 @@ use alloc::boxed::Box;
 pub use base::{Runtime, WeakRuntime};
 pub use userdata::{UserDataError, UserDataGuard};
 
+#[cfg(all(feature = "futures", feature = "parallel"))]
+pub(crate) use r#async::DropContextPtr;
 #[cfg(feature = "futures")]
 pub(crate) use r#async::InnerRuntime;
 #[cfg(feature = "futures")]

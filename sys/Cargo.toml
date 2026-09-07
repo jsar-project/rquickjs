@@ -24,6 +24,7 @@ optional = true
 
 [features]
 bindgen = ["bindgen-rs"]
+zephyr = ["bindgen"]
 
 # Debug logging
 logging = ["pretty_env_logger"]

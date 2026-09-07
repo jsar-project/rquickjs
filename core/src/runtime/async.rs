@@ -7,9 +7,6 @@ use core::{ptr::NonNull, result::Result as StdResult, task::Poll};
 #[cfg(feature = "std")]
 use std::println;
 
-#[cfg(feature = "parallel")]
-use std::sync::mpsc::{self, Receiver, Sender};
-
 use async_lock::Mutex;
 
 use super::{
@@ -21,22 +18,35 @@ use crate::allocator::Allocator;
 use crate::loader::{Loader, Resolver};
 #[cfg(feature = "parallel")]
 use crate::util::{AssertSendFuture, AssertSyncFuture};
+#[cfg(feature = "parallel")]
+use crate::Mut;
 use crate::{
     context::AsyncContext, qjs, result::AsyncJobException, util::ManualPoll, Ctx, Exception, Result,
 };
+
+#[cfg(feature = "parallel")]
+#[derive(Debug)]
+pub(crate) struct DropContextPtr(pub(crate) NonNull<qjs::JSContext>);
+
+// Context destruction is deferred until the runtime lock is held.
+#[cfg(feature = "parallel")]
+unsafe impl Send for DropContextPtr {}
+
+#[cfg(feature = "parallel")]
+type DropQueue = Arc<Mut<Vec<DropContextPtr>>>;
 
 #[derive(Debug)]
 pub(crate) struct InnerRuntime {
     pub runtime: RawRuntime,
     #[cfg(feature = "parallel")]
-    pub drop_recv: Receiver<NonNull<qjs::JSContext>>,
+    pub drop_queue: DropQueue,
 }
 
 impl InnerRuntime {
     pub fn drop_pending(&self) {
         #[cfg(feature = "parallel")]
-        while let Ok(x) = self.drop_recv.try_recv() {
-            unsafe { qjs::JS_FreeContext(x.as_ptr()) }
+        for ptr in self.drop_queue.lock().drain(..) {
+            unsafe { qjs::JS_FreeContext(ptr.0.as_ptr()) }
         }
     }
 }
@@ -58,7 +68,7 @@ unsafe impl Send for InnerRuntime {}
 pub struct AsyncWeakRuntime {
     inner: Weak<Mutex<InnerRuntime>>,
     #[cfg(feature = "parallel")]
-    drop_send: Sender<NonNull<qjs::JSContext>>,
+    drop_queue: DropQueue,
 }
 
 impl AsyncWeakRuntime {
@@ -66,7 +76,7 @@ impl AsyncWeakRuntime {
         self.inner.upgrade().map(|inner| AsyncRuntime {
             inner,
             #[cfg(feature = "parallel")]
-            drop_send: self.drop_send.clone(),
+            drop_queue: self.drop_queue.clone(),
         })
     }
 }
@@ -78,7 +88,7 @@ pub struct AsyncRuntime {
     // use Arc instead of Ref so we can use OwnedLock
     pub(crate) inner: Arc<Mutex<InnerRuntime>>,
     #[cfg(feature = "parallel")]
-    pub(crate) drop_send: Sender<NonNull<qjs::JSContext>>,
+    pub(crate) drop_queue: DropQueue,
 }
 
 // Since all functions which use runtime are behind a mutex
@@ -110,16 +120,16 @@ impl AsyncRuntime {
         let runtime = unsafe { RawRuntime::new(opaque) }?;
 
         #[cfg(feature = "parallel")]
-        let (drop_send, drop_recv) = mpsc::channel();
+        let drop_queue = Arc::new(Mut::new(Vec::new()));
 
         Ok(Self {
             inner: Arc::new(Mutex::new(InnerRuntime {
                 runtime,
                 #[cfg(feature = "parallel")]
-                drop_recv,
+                drop_queue: drop_queue.clone(),
             })),
             #[cfg(feature = "parallel")]
-            drop_send,
+            drop_queue,
         })
     }
 
@@ -136,16 +146,16 @@ impl AsyncRuntime {
         let runtime = unsafe { RawRuntime::new_with_allocator(opaque, allocator) }?;
 
         #[cfg(feature = "parallel")]
-        let (drop_send, drop_recv) = mpsc::channel();
+        let drop_queue = Arc::new(Mut::new(Vec::new()));
 
         Ok(Self {
             inner: Arc::new(Mutex::new(InnerRuntime {
                 runtime,
                 #[cfg(feature = "parallel")]
-                drop_recv,
+                drop_queue: drop_queue.clone(),
             })),
             #[cfg(feature = "parallel")]
-            drop_send,
+            drop_queue,
         })
     }
 
@@ -154,7 +164,7 @@ impl AsyncRuntime {
         AsyncWeakRuntime {
             inner: Arc::downgrade(&self.inner),
             #[cfg(feature = "parallel")]
-            drop_send: self.drop_send.clone(),
+            drop_queue: self.drop_queue.clone(),
         }
     }
 
@@ -189,6 +199,16 @@ impl AsyncRuntime {
                 .await
                 .runtime
                 .set_interrupt_handler(handler);
+        }
+    }
+
+    /// Configure whether JavaScript Atomics operations may block this thread.
+    ///
+    /// This must be enabled before using `Atomics.wait`.
+    #[inline]
+    pub async fn set_can_block(&self, can_block: bool) {
+        unsafe {
+            self.inner.lock().await.runtime.set_can_block(can_block);
         }
     }
 

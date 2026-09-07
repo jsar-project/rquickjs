@@ -3,7 +3,16 @@ use core::ptr::NonNull;
 use crate::qjs;
 
 #[cfg(feature = "parallel")]
-use std::sync::Arc;
+use alloc::sync::Arc;
+
+#[cfg(feature = "parallel")]
+struct ParallelContext(NonNull<qjs::JSContext>);
+
+// Access to the context is serialized by the owning runtime lock.
+#[cfg(feature = "parallel")]
+unsafe impl Send for ParallelContext {}
+#[cfg(feature = "parallel")]
+unsafe impl Sync for ParallelContext {}
 
 /// Trait to specify how to drop a context once it goes out of scope.
 /// Implemented on Runtime and AsyncRuntime.
@@ -19,7 +28,7 @@ pub(crate) struct ContextOwner<R: DropContext> {
     #[cfg(not(feature = "parallel"))]
     ctx: NonNull<qjs::JSContext>,
     #[cfg(feature = "parallel")]
-    pub(crate) ctx: Arc<NonNull<qjs::JSContext>>,
+    ctx: Arc<ParallelContext>,
     pub(crate) rt: R,
 }
 
@@ -31,7 +40,7 @@ impl<R: DropContext> ContextOwner<R> {
     #[cfg(feature = "parallel")]
     pub(crate) unsafe fn new(ctx: NonNull<qjs::JSContext>, rt: R) -> Self {
         Self {
-            ctx: Arc::new(ctx),
+            ctx: Arc::new(ParallelContext(ctx)),
             rt,
         }
     }
@@ -43,7 +52,7 @@ impl<R: DropContext> ContextOwner<R> {
 
     #[cfg(feature = "parallel")]
     pub(crate) fn ctx(&self) -> NonNull<qjs::JSContext> {
-        *self.ctx
+        self.ctx.0
     }
 
     pub(crate) fn rt(&self) -> &R {

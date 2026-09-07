@@ -422,6 +422,11 @@ impl RawRuntime {
         self.get_opaque().set_interrupt_handler(handler);
     }
 
+    /// Allow or reject blocking Atomics operations in this runtime.
+    pub unsafe fn set_can_block(&mut self, can_block: bool) {
+        qjs::JS_SetCanBlock(self.rt.as_ptr(), can_block);
+    }
+
     fn add_dump_flags(rt: *mut rquickjs_sys::JSRuntime) {
         unsafe {
             qjs::JS_SetDumpFlags(rt, build_dump_flags());
