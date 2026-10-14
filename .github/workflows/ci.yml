@@ -15,7 +15,7 @@ jobs:
   format:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - name: Setup Rust
@@ -29,7 +29,7 @@ jobs:
   doc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - name: Setup Rust
@@ -54,7 +54,7 @@ jobs:
     permissions:
       checks: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -78,7 +78,7 @@ jobs:
         msrv: [1.87.0]
     name: ubuntu / ${{ matrix.msrv }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - name: Install ${{ matrix.msrv }}
@@ -93,7 +93,7 @@ jobs:
     name: ubuntu / stable / coverage
     if: github.actor != 'dependabot[bot]'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - name: Install stable
@@ -133,7 +133,7 @@ jobs:
     runs-on: ubuntu-latest
     name: ubuntu / nightly / sanitizer
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - name: Install stable
@@ -154,7 +154,7 @@ jobs:
   examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - name: Setup Rust
@@ -329,7 +329,7 @@ jobs:
             features: full-async
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - name: Setup cross linux toolchain
@@ -545,7 +545,7 @@ jobs:
       - test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Download bindings
         uses: actions/download-artifact@v8
         with:
