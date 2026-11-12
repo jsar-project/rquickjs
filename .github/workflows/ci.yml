@@ -425,6 +425,9 @@ jobs:
 
             curl -L --retry 5 https://github.com/musl-cross/musl-cross/releases/latest/download/aarch64-unknown-linux-musl.tar.xz | tar xJf -
             sudo mv aarch64-unknown-linux-musl /musl
+            # Bindgen runs host Clang; point it at the target libc headers.
+            sysroot=$(/musl/bin/aarch64-unknown-linux-musl-gcc -print-sysroot)
+            echo "BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_linux_musl=--target=aarch64-unknown-linux-musl --sysroot=$sysroot" >> $GITHUB_ENV
 
             echo "CC_aarch64_unknown_linux_musl=aarch64-unknown-linux-musl-gcc" >> $GITHUB_ENV
             echo "CXX_aarch64_unknown_linux_musl=aarch64-unknown-linux-musl-g++" >> $GITHUB_ENV
@@ -448,6 +451,7 @@ jobs:
             gcc-14-loongarch64-linux-gnu \
             g++-14-loongarch64-linux-gnu \
             clang \
+            lld \
             qemu-user \
             qemu-system-arm \
             qemu-efi-aarch64 \
@@ -468,14 +472,17 @@ jobs:
           echo "CC_loongarch64_unknown_linux_gnu=loongarch64-linux-gnu-gcc-14" >> $GITHUB_ENV
           echo "CXX_loongarch64_unknown_linux_gnu=loongarch64-linux-gnu-g++-14" >> $GITHUB_ENV
           echo "AR_loongarch64_unknown_linux_gnu=loongarch64-linux-gnu-ar" >> $GITHUB_ENV
-          echo "CARGO_TARGET_LOONGARCH64_UNKNOWN_LINUX_GNU_LINKER=loongarch64-linux-gnu-gcc-14" >> $GITHUB_ENV
+          # Use LLD through the GCC driver, including in nested trybuild runs.
+          printf '%s\n' '#!/bin/sh' 'exec /usr/bin/loongarch64-linux-gnu-gcc-14 -fuse-ld=lld "$@"' | sudo tee /usr/local/bin/loongarch64-linux-gnu-gcc-lld >/dev/null
+          sudo chmod +x /usr/local/bin/loongarch64-linux-gnu-gcc-lld
+          echo "CARGO_TARGET_LOONGARCH64_UNKNOWN_LINUX_GNU_LINKER=loongarch64-linux-gnu-gcc-lld" >> $GITHUB_ENV
           echo "CARGO_TARGET_LOONGARCH64_UNKNOWN_LINUX_GNU_RUNNER=qemu-loongarch64 -L /usr/loongarch64-linux-gnu" >> $GITHUB_ENV
 
           mkdir -p ~/.cargo/
           echo "[target.loongarch64-unknown-linux-musl]" >> ~/.cargo/config.toml
           echo 'rustflags = ["-C", "target-feature=+crt-static", "-C", "link-self-contained=yes", "-C", "linker=loongarch64-unknown-linux-musl-gcc"]' >> ~/.cargo/config.toml
           echo "[target.loongarch64-unknown-linux-gnu]" >> ~/.cargo/config.toml
-          echo 'rustflags = ["-C", "linker=loongarch64-linux-gnu-gcc-14"]' >> ~/.cargo/config.toml
+          echo 'rustflags = ["-C", "linker=loongarch64-linux-gnu-gcc-lld"]' >> ~/.cargo/config.toml
 
           echo "/musl/bin" >> $GITHUB_PATH
       - name: Setup wasmtime for wasm32-wasip1 and wasm32-wasip2
