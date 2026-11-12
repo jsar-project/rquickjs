@@ -162,19 +162,17 @@ jobs:
           echo "CC_loongarch64_unknown_linux_gnu=loongarch64-linux-gnu-gcc-14" >> $GITHUB_ENV
           echo "CXX_loongarch64_unknown_linux_gnu=loongarch64-linux-gnu-g++-14" >> $GITHUB_ENV
           echo "AR_loongarch64_unknown_linux_gnu=loongarch64-linux-gnu-ar" >> $GITHUB_ENV
-          echo "CARGO_TARGET_LOONGARCH64_UNKNOWN_LINUX_GNU_LINKER=loongarch64-linux-gnu-gcc-14" >> $GITHUB_ENV
+          # Use LLD through the GCC driver, including in nested trybuild runs.
+          printf '%s\n' '#!/bin/sh' 'exec /usr/bin/loongarch64-linux-gnu-gcc-14 -fuse-ld=lld "$@"' | sudo tee /usr/local/bin/loongarch64-linux-gnu-gcc-lld >/dev/null
+          sudo chmod +x /usr/local/bin/loongarch64-linux-gnu-gcc-lld
+          echo "CARGO_TARGET_LOONGARCH64_UNKNOWN_LINUX_GNU_LINKER=loongarch64-linux-gnu-gcc-lld" >> $GITHUB_ENV
           echo "CARGO_TARGET_LOONGARCH64_UNKNOWN_LINUX_GNU_RUNNER=qemu-loongarch64 -L /usr/loongarch64-linux-gnu" >> $GITHUB_ENV
 
           mkdir -p ~/.cargo/
           echo "[target.loongarch64-unknown-linux-musl]" >> ~/.cargo/config.toml
           echo 'rustflags = ["-C", "target-feature=+crt-static", "-C", "link-self-contained=yes", "-C", "linker=loongarch64-unknown-linux-musl-gcc"]' >> ~/.cargo/config.toml
           echo "[target.loongarch64-unknown-linux-gnu]" >> ~/.cargo/config.toml
-          echo 'rustflags = ["-C", "linker=loongarch64-linux-gnu-gcc-14"]' >> ~/.cargo/config.toml
-          # setup-rust-toolchain sets RUSTFLAGS and overrides Cargo target flags.
-          # Recent nightlies require --no-rosegment, supported by LLD.
-          if [ "${{ matrix.target }}" = "loongarch64-unknown-linux-gnu" ]; then
-            echo "RUSTFLAGS=-D warnings -C link-arg=-fuse-ld=lld" >> $GITHUB_ENV
-          fi
+          echo 'rustflags = ["-C", "linker=loongarch64-linux-gnu-gcc-lld"]' >> ~/.cargo/config.toml
 
           echo "/musl/bin" >> $GITHUB_PATH
       - name: Setup wasmtime for wasm32-wasip1 and wasm32-wasip2
