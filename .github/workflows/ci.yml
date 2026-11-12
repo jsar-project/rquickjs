@@ -1,237 +1,45 @@
-name: CI baseline
+name: CI coverage control
 on: [pull_request]
 jobs:
-  test:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - task: bindings
-            os: ubuntu-latest
-            rust: stable
-            target: aarch64-unknown-linux-musl
-            features: full-async
-          - task: bindings
-            os: ubuntu-24.04
-            rust: nightly
-            target: loongarch64-unknown-linux-gnu
-            features: full-async
-    runs-on: ${{ matrix.os }}
+  coverage:
+    runs-on: ubuntu-latest
+    name: ubuntu / stable / coverage
+    if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v6
         with:
           ref: 816d59cde38cb0f549238996398a4c823d46119f
           submodules: true
-      - name: Setup cross linux toolchain
-        if: contains(matrix.target, '-linux-') && !startsWith(matrix.target, 'aarch64') && !startsWith(matrix.target, 'armv7') && !startsWith(matrix.target, 'loongarch64') && !startsWith(matrix.target, 'x86_64-') && !endsWith(matrix.target, '-musl') && !startsWith(matrix.target, 'powerpc64')
-        run: |
-          case "${{ matrix.target }}" in
-            i686-*) SYSTEM_ARCH=i386 ;;
-          esac
-          GCC_TARGET=$(printf "${{ matrix.target }}" | sed 's/-unknown-/-/' | sed 's/arm[^-]*/arm/g')
-          ENV_TARGET=$(printf "${{ matrix.target }}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
-          sudo dpkg --add-architecture ${SYSTEM_ARCH}
-          sudo apt-get update -y
-          sudo apt-get install -y libc6-dev:${SYSTEM_ARCH} gcc-${GCC_TARGET} libgcc-s1:${SYSTEM_ARCH}
-          echo "CARGO_TARGET_${ENV_TARGET}_LINKER=${GCC_TARGET}-gcc" >> $GITHUB_ENV
-
-      - name: Setup musl-tools
-        if: startsWith(matrix.target, 'x86_64-') && endsWith(matrix.target, '-musl')
-        run: sudo apt-get update -y && sudo apt-get install -y musl-tools
-
-      - name: Setup armv7 toolchain
-        if: startsWith(matrix.target, 'armv7') && contains(matrix.target, '-linux-')
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            libc6-armhf-cross \
-            libc6-dev-armhf-cross \
-            gcc-arm-linux-gnueabihf \
-            qemu-user
-          echo "CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
-          echo "CXX_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-g++" >> $GITHUB_ENV
-          echo "AR_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-ar" >> $GITHUB_ENV
-          echo "CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc" >> $GITHUB_ENV
-          echo "CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_RUNNER=qemu-arm -L /usr/arm-linux-gnueabihf" >> $GITHUB_ENV
-
-      - name: Setup powerpc64 toolchain
-        if: startsWith(matrix.target, 'powerpc64') && endsWith(matrix.target, '-gnu')
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            libc6-ppc64-cross \
-            libc6-dev-ppc64-cross \
-            gcc-powerpc64-linux-gnu \
-            qemu-user
-          echo "CC_powerpc64_unknown_linux_gnu=powerpc64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CXX_powerpc64_unknown_linux_gnu=powerpc64-linux-gnu-g++" >> $GITHUB_ENV
-          echo "AR_powerpc64_unknown_linux_gnu=powerpc64-linux-gnu-ar" >> $GITHUB_ENV
-          echo "CARGO_TARGET_POWERPC64_UNKNOWN_LINUX_GNU_LINKER=powerpc64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CARGO_TARGET_POWERPC64_UNKNOWN_LINUX_GNU_RUNNER=qemu-ppc64 -L /usr/powerpc64-linux-gnu" >> $GITHUB_ENV
-
-      - name: Setup gnu aarch64
-        if: startsWith(matrix.target, 'aarch64') && endsWith(matrix.target, '-gnu')
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            curl \
-            libc6-arm64-cross \
-            libc6-dev-arm64-cross \
-            crossbuild-essential-arm64 \
-            clang \
-            qemu-system-arm \
-            qemu-efi-aarch64 \
-            qemu-utils \
-            qemu-user
-
-          echo "CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-          echo "AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER=qemu-aarch64" >> $GITHUB_ENV
-
-          echo "LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib" >> $GITHUB_ENV
-
-          sudo ln -s /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1 /lib/ld-linux-aarch64.so.1
-
-          mkdir -p ~/.cargo/
-          echo "[target.aarch64-unknown-linux-gnu]" >> ~/.cargo/config.toml
-          echo 'rustflags = ["-C", "linker=aarch64-linux-gnu-gcc"]' >> ~/.cargo/config.toml
-
-      - name: Setup musl aarch64
-        if: startsWith(matrix.target, 'aarch64') && contains(matrix.target, '-musl')
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            curl \
-            libc6-arm64-cross \
-            libc6-dev-arm64-cross \
-            crossbuild-essential-arm64 \
-            clang \
-            qemu-system-arm \
-            qemu-efi-aarch64 \
-            qemu-utils \
-            qemu-user
-
-            curl -L --retry 5 https://github.com/musl-cross/musl-cross/releases/latest/download/aarch64-unknown-linux-musl.tar.xz | tar xJf -
-            sudo mv aarch64-unknown-linux-musl /musl
-            # Bindgen runs host Clang; point it at the target libc headers.
-            sysroot=$(/musl/bin/aarch64-unknown-linux-musl-gcc -print-sysroot)
-            echo "BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_linux_musl=--target=aarch64-unknown-linux-musl --sysroot=$sysroot" >> $GITHUB_ENV
-
-            echo "CC_aarch64_unknown_linux_musl=aarch64-unknown-linux-musl-gcc" >> $GITHUB_ENV
-            echo "CXX_aarch64_unknown_linux_musl=aarch64-unknown-linux-musl-g++" >> $GITHUB_ENV
-            echo "AR_aarch64_unknown_linux_musl=aarch64-unknown-linux-musl-ar" >> $GITHUB_ENV
-            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-unknown-linux-musl-gcc" >> $GITHUB_ENV
-            echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUNNER=qemu-aarch64" >> $GITHUB_ENV
-
-            mkdir -p ~/.cargo/
-            echo "[target.aarch64-unknown-linux-musl]" >> ~/.cargo/config.toml
-            echo 'rustflags = ["-C", "link-self-contained=yes","-C", "linker=rust-lld"]' >> ~/.cargo/config.toml
-
-            echo "/musl/bin" >> $GITHUB_PATH
-
-      - name: Setup cross loongarch64
-        if: startsWith(matrix.target, 'loongarch64') && contains(matrix.target, '-linux-')
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            curl \
-            libc6-dev-loong64-cross \
-            gcc-14-loongarch64-linux-gnu \
-            g++-14-loongarch64-linux-gnu \
-            clang \
-            lld \
-            qemu-user \
-            qemu-system-arm \
-            qemu-efi-aarch64 \
-            qemu-utils \
-            qemu-user-static
-
-          curl -L --retry 5 https://github.com/musl-cross/musl-cross/releases/latest/download/loongarch64-unknown-linux-musl.tar.xz | tar xJf -
-          sudo mv loongarch64-unknown-linux-musl /musl
-
-          ls -al /usr/loongarch64-linux-gnu
-
-          echo "CC_loongarch64_unknown_linux_musl=loongarch64-unknown-linux-musl-gcc" >> $GITHUB_ENV
-          echo "CXX_loongarch64_unknown_linux_musl=loongarch64-unknown-linux-musl-g++" >> $GITHUB_ENV
-          echo "AR_loongarch64_unknown_linux_musl=loongarch64-unknown-linux-musl-ar" >> $GITHUB_ENV
-          echo "CARGO_TARGET_LOONGARCH64_UNKNOWN_LINUX_MUSL_LINKER=loongarch64-unknown-linux-musl-gcc" >> $GITHUB_ENV
-          echo "CARGO_TARGET_LOONGARCH64_UNKNOWN_LINUX_MUSL_RUNNER=qemu-loongarch64 -L /musl/loongarch64-unknown-linux-musl/sysroot" >> $GITHUB_ENV
-
-          echo "CC_loongarch64_unknown_linux_gnu=loongarch64-linux-gnu-gcc-14" >> $GITHUB_ENV
-          echo "CXX_loongarch64_unknown_linux_gnu=loongarch64-linux-gnu-g++-14" >> $GITHUB_ENV
-          echo "AR_loongarch64_unknown_linux_gnu=loongarch64-linux-gnu-ar" >> $GITHUB_ENV
-          # Use LLD through the GCC driver, including in nested trybuild runs.
-          printf '%s\n' '#!/bin/sh' 'exec /usr/bin/loongarch64-linux-gnu-gcc-14 -fuse-ld=lld "$@"' | sudo tee /usr/local/bin/loongarch64-linux-gnu-gcc-lld >/dev/null
-          sudo chmod +x /usr/local/bin/loongarch64-linux-gnu-gcc-lld
-          echo "CARGO_TARGET_LOONGARCH64_UNKNOWN_LINUX_GNU_LINKER=loongarch64-linux-gnu-gcc-lld" >> $GITHUB_ENV
-          echo "CARGO_TARGET_LOONGARCH64_UNKNOWN_LINUX_GNU_RUNNER=qemu-loongarch64 -L /usr/loongarch64-linux-gnu" >> $GITHUB_ENV
-
-          mkdir -p ~/.cargo/
-          echo "[target.loongarch64-unknown-linux-musl]" >> ~/.cargo/config.toml
-          echo 'rustflags = ["-C", "target-feature=+crt-static", "-C", "link-self-contained=yes", "-C", "linker=loongarch64-unknown-linux-musl-gcc"]' >> ~/.cargo/config.toml
-          echo "[target.loongarch64-unknown-linux-gnu]" >> ~/.cargo/config.toml
-          echo 'rustflags = ["-C", "linker=loongarch64-linux-gnu-gcc-lld"]' >> ~/.cargo/config.toml
-
-          echo "/musl/bin" >> $GITHUB_PATH
-      - name: Setup wasmtime for wasm32-wasip1 and wasm32-wasip2
-        if: matrix.target == 'wasm32-wasip1' || matrix.target == 'wasm32-wasip2'
-        uses: bytecodealliance/actions/wasmtime/setup@v1
-      - name: Setup msys2 toolchains
-        if: startsWith(matrix.os, 'windows') && endsWith(matrix.target, '-gnu')
-        uses: msys2/setup-msys2@v2
-        with:
-          release: false
-      - name: Prepare env for windows
-        if: startsWith(matrix.os, 'windows') && endsWith(matrix.target, '-gnu')
-        run: |
-          # Add symlinks to the target-specific GNU sysroots for Clang
-          New-Item -Path "C:\Program Files\LLVM\x86_64-w64-mingw32" -ItemType SymbolicLink -Value "C:\msys64\mingw64\x86_64-w64-mingw32"
-          New-Item -Path "C:\Program Files\LLVM\i686-w64-mingw32" -ItemType SymbolicLink -Value "C:\msys64\mingw64\i686-w64-mingw32"
-          # Add paths to GCC executables to PATH
-          echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "C:\msys64\mingw32\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          # Configure CC_<target> environment variables
-          echo "CC_x86_64_pc_windows_gnu=x86_64-w64-mingw32-gcc" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-          echo "CC_i686_pc_windows_gnu=i686-w64-mingw32-gcc" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-          # echo "HOST_CC=x86_64-w64-mingw32-gcc" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Setup Rust
+      - name: Install stable
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: ${{ matrix.rust }}
-          target: ${{ matrix.target }}
-          components: rustfmt rust-src
-      - name: Update deps
-        run: cargo update
-      - name: Build sys
-        env:
-          RUST_LOG: bindgen=warn,bindgen::ir=error,bindgen::codegen=error
-          BUILD_TARGET: ${{ matrix.target }}
+          components: llvm-tools-preview
+      - name: cargo install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: cargo generate-lockfile
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+      - name: cargo llvm-cov
+        run: cargo llvm-cov --locked --no-default-features --features full-async,compile-tests,bindgen --workspace --lcov --output-path lcov.info
+      - name: Print coverage summary
         run: |
-          cargo build ${{ matrix.optimization && '--release' || '' }} --manifest-path sys/Cargo.toml --target ${{ matrix.target }} --features bindgen,update-bindings,logging
-          cat sys/src/bindings/${{ matrix.target }}.rs
-      - name: Upload bindings
-        if: matrix.task == 'bindings'
-        uses: actions/upload-artifact@v7
-        with:
-          name: bindings-${{ matrix.target }}
-          path: sys/src/bindings/${{ matrix.target }}.rs
-          overwrite: true
-      - name: Build
-        if: ${{ !matrix.no-build }}
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
-          TARGET: ${{ matrix.target }}
-        run: |
-          cargo build ${{ matrix.optimization && '--release' || '' }} --target ${{ matrix.target }} --no-default-features --features ${{ matrix.features }}
-      - name: Test
-        if: ${{ !matrix.no-build && !matrix.no-test }}
-        timeout-minutes: 12
-        env:
-          RUST_BACKTRACE: full
-        run: |
-          # Limit test threads to 1 for QEMU-emulated targets to work around an intermittent
-          # QEMU user-mode emulation bug: "QEMU internal SIGSEGV {code=MAPERR, addr=0x20}"
-          # This is a race condition in QEMU's thread emulation, not a bug in rquickjs.
-          ${{ (startsWith(matrix.target, 'loongarch64') || startsWith(matrix.target, 'aarch64-unknown-linux') || startsWith(matrix.target, 'armv7') || startsWith(matrix.target, 'powerpc64')) && 'RUST_TEST_THREADS=1' || '' }} ${{ matrix.target == 'wasm32-wasip1' && 'CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime' || '' }} ${{ matrix.target == 'wasm32-wasip2' && 'CARGO_TARGET_WASM32_WASIP2_RUNNER=wasmtime' || '' }} cargo test ${{ matrix.optimization && '--release' || '' }} --all ${{ (matrix.target == 'wasm32-wasip1' || matrix.target == 'wasm32-wasip2') && '--exclude module-loader' || ''  }} --target ${{ matrix.target }} --no-default-features --features ${{ matrix.features }}
+          echo "Rust: $(rustc --version)"
+          awk '
+            /^LF:/ { lf += substr($0, 4) }
+            /^LH:/ { lh += substr($0, 4) }
+            /^FNF:/ { fnf += substr($0, 5) }
+            /^FNH:/ { fnh += substr($0, 5) }
+            END {
+              if (lf > 0) {
+                printf "Line coverage: %.2f%% (%d/%d)\n", (lh / lf) * 100, lh, lf;
+              } else {
+                print "Line coverage: n/a";
+              }
+              if (fnf > 0) {
+                printf "Function coverage: %.2f%% (%d/%d)\n", (fnh / fnf) * 100, fnh, fnf;
+              } else {
+                print "Function coverage: n/a";
+              }
+            }
+          ' lcov.info
+
