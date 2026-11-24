@@ -1654,6 +1654,12 @@ unsafe extern "C" {
     ) -> ::core::ffi::c_int;
 }
 unsafe extern "C" {
+    pub fn JS_SetJobContextToken(rt: *mut JSRuntime, high: u64, low: u64);
+}
+unsafe extern "C" {
+    pub fn JS_GetJobContextToken(rt: *mut JSRuntime, high: *mut u64, low: *mut u64);
+}
+unsafe extern "C" {
     pub fn JS_IsJobPending(rt: *mut JSRuntime) -> bool;
 }
 unsafe extern "C" {

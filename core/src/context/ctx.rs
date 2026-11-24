@@ -397,6 +397,28 @@ impl<'js> Ctx<'js> {
         })
     }
 
+    /// Read the opaque host token installed for the current execution.
+    /// A new runtime starts with token zero.
+    pub fn job_context_token(&self) -> u128 {
+        let (mut high, mut low) = (0, 0);
+        unsafe {
+            qjs::JS_GetJobContextToken(qjs::JS_GetRuntime(self.ctx.as_ptr()), &mut high, &mut low);
+        }
+        (u128::from(high) << 64) | u128::from(low)
+    }
+
+    /// Set the token inherited by newly queued jobs and Promise reactions.
+    /// QuickJS restores the previous token after each job runs.
+    pub fn set_job_context_token(&self, token: u128) {
+        unsafe {
+            qjs::JS_SetJobContextToken(
+                qjs::JS_GetRuntime(self.ctx.as_ptr()),
+                (token >> 64) as u64,
+                token as u64,
+            );
+        }
+    }
+
     /// Executes a quickjs job.
     ///
     /// Returns wether a job was actually executed.
