@@ -397,24 +397,24 @@ impl<'js> Ctx<'js> {
         })
     }
 
-    /// Read the opaque host token installed for the current execution.
-    /// A new runtime starts with token zero.
-    pub fn job_context_token(&self) -> u128 {
-        let (mut high, mut low) = (0, 0);
+    /// Returns the active runtime's continuation-preserved embedder data.
+    /// Its initial value is `undefined`.
+    pub fn continuation_preserved_embedder_data(&self) -> Value<'js> {
         unsafe {
-            qjs::JS_GetJobContextToken(qjs::JS_GetRuntime(self.ctx.as_ptr()), &mut high, &mut low);
+            let value =
+                qjs::JS_GetContinuationPreservedEmbedderData(qjs::JS_GetRuntime(self.as_ptr()));
+            Value::from_js_value(self.clone(), value)
         }
-        (u128::from(high) << 64) | u128::from(low)
     }
 
-    /// Set the token inherited by newly queued jobs and Promise reactions.
-    /// QuickJS restores the previous token after each job runs.
-    pub fn set_job_context_token(&self, token: u128) {
+    /// Sets the value captured by newly queued jobs and by Promise reactions
+    /// (including native `await`) at registration. Each job restores the
+    /// previous value when it returns, including on exception.
+    pub fn set_continuation_preserved_embedder_data(&self, value: &Value<'js>) {
         unsafe {
-            qjs::JS_SetJobContextToken(
-                qjs::JS_GetRuntime(self.ctx.as_ptr()),
-                (token >> 64) as u64,
-                token as u64,
+            qjs::JS_SetContinuationPreservedEmbedderData(
+                qjs::JS_GetRuntime(self.as_ptr()),
+                value.as_js_value(),
             );
         }
     }
@@ -539,6 +539,21 @@ impl<'js> Ctx<'js> {
 #[cfg(test)]
 mod test {
     use crate::{CatchResultExt, JsLifetime};
+
+    #[test]
+    fn continuation_preserved_embedder_data() {
+        use crate::{test_with, Object, Value};
+
+        test_with(|ctx| {
+            assert!(ctx.continuation_preserved_embedder_data().is_undefined());
+            let data = Object::new(ctx.clone()).unwrap();
+            ctx.set_continuation_preserved_embedder_data(data.as_value());
+            let snapshot = ctx.continuation_preserved_embedder_data();
+            ctx.set_continuation_preserved_embedder_data(&Value::new_undefined(ctx.clone()));
+            assert_eq!(snapshot, data.into_value());
+            assert!(ctx.continuation_preserved_embedder_data().is_undefined());
+        });
+    }
 
     #[test]
     fn exports() {
