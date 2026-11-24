@@ -542,15 +542,26 @@ mod test {
 
     #[test]
     fn continuation_preserved_embedder_data() {
-        use crate::{test_with, Object, Value};
+        use crate::{test_with, Ctx, Function, Object, Promise, Value};
+
+        fn read_data<'js>(ctx: Ctx<'js>) -> Value<'js> {
+            ctx.continuation_preserved_embedder_data()
+        }
 
         test_with(|ctx| {
+            ctx.globals()
+                .set("readData", Function::new(ctx.clone(), read_data).unwrap())
+                .unwrap();
             assert!(ctx.continuation_preserved_embedder_data().is_undefined());
             let data = Object::new(ctx.clone()).unwrap();
             ctx.set_continuation_preserved_embedder_data(data.as_value());
             let snapshot = ctx.continuation_preserved_embedder_data();
+            let pending: Promise = ctx
+                .eval("(async () => { await 0; return readData(); })()")
+                .unwrap();
             ctx.set_continuation_preserved_embedder_data(&Value::new_undefined(ctx.clone()));
             assert_eq!(snapshot, data.into_value());
+            assert_eq!(pending.finish::<Value>().unwrap(), snapshot);
             assert!(ctx.continuation_preserved_embedder_data().is_undefined());
         });
     }
