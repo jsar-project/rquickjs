@@ -397,6 +397,28 @@ impl<'js> Ctx<'js> {
         })
     }
 
+    /// Returns the active runtime's continuation-preserved embedder data.
+    /// Its initial value is `undefined`.
+    pub fn continuation_preserved_embedder_data(&self) -> Value<'js> {
+        unsafe {
+            let value =
+                qjs::JS_GetContinuationPreservedEmbedderData(qjs::JS_GetRuntime(self.as_ptr()));
+            Value::from_js_value(self.clone(), value)
+        }
+    }
+
+    /// Sets the value captured by newly queued jobs and by Promise reactions
+    /// (including native `await`) at registration. Each job restores the
+    /// previous value when it returns, including on exception.
+    pub fn set_continuation_preserved_embedder_data(&self, value: &Value<'js>) {
+        unsafe {
+            qjs::JS_SetContinuationPreservedEmbedderData(
+                qjs::JS_GetRuntime(self.as_ptr()),
+                value.as_js_value(),
+            );
+        }
+    }
+
     /// Executes a quickjs job.
     ///
     /// Returns wether a job was actually executed.
@@ -517,6 +539,32 @@ impl<'js> Ctx<'js> {
 #[cfg(test)]
 mod test {
     use crate::{CatchResultExt, JsLifetime};
+
+    #[test]
+    fn continuation_preserved_embedder_data() {
+        use crate::{test_with, Ctx, Function, Object, Promise, Value};
+
+        fn read_data<'js>(ctx: Ctx<'js>) -> Value<'js> {
+            ctx.continuation_preserved_embedder_data()
+        }
+
+        test_with(|ctx| {
+            ctx.globals()
+                .set("readData", Function::new(ctx.clone(), read_data).unwrap())
+                .unwrap();
+            assert!(ctx.continuation_preserved_embedder_data().is_undefined());
+            let data = Object::new(ctx.clone()).unwrap();
+            ctx.set_continuation_preserved_embedder_data(data.as_value());
+            let snapshot = ctx.continuation_preserved_embedder_data();
+            let pending: Promise = ctx
+                .eval("(async () => { await 0; return readData(); })()")
+                .unwrap();
+            ctx.set_continuation_preserved_embedder_data(&Value::new_undefined(ctx.clone()));
+            assert_eq!(snapshot, data.into_value());
+            assert_eq!(pending.finish::<Value>().unwrap(), snapshot);
+            assert!(ctx.continuation_preserved_embedder_data().is_undefined());
+        });
+    }
 
     #[test]
     fn exports() {

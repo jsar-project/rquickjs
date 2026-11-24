@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `Ctx::continuation_preserved_embedder_data` and `Ctx::set_continuation_preserved_embedder_data` to carry a host value across Promise reactions and queued jobs.
 - Added `#[qjs(prop)]` method attribute to declare a JS data property on a class prototype.
   Unlike `#[qjs(get)]`, which generates an accessor and requires a `FromJs<Self>` receiver,
   `prop` is evaluated at class registration time and emits a plain data descriptor (matching
@@ -40,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed `Object::instance_of` and `Object::as_class` leaving a JavaScript exception pending when a class check returns false.
 - Fixed QuickJS rope strings (`JS_TAG_STRING_ROPE`) not being recognized as strings, causing `type_of()`, `is_string()`, and `as_string()` to fail on large concatenated strings
 - Fixed interrupt handler causing GC assertion failure due to missing `JS_DupContext` on error context from `JS_ExecutePendingJob` #[664](https://github.com/DelSkayn/rquickjs/pull/664)
 - Fixed cross-thread stack overflow false positives in parallel mode by updating stack baseline before QuickJS C entry points

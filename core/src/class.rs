@@ -392,10 +392,7 @@ impl<'js> Object<'js> {
             return false;
         };
 
-        // This checks if the class is of the right class id.
-        let Some(x) = NonNull::new(unsafe {
-            qjs::JS_GetOpaque2(self.0.ctx.as_ptr(), self.0.as_js_value(), id)
-        }) else {
+        let Some(x) = NonNull::new(unsafe { qjs::JS_GetOpaque(self.0.as_js_value(), id) }) else {
             return false;
         };
 
@@ -471,6 +468,18 @@ mod test {
         CatchResultExt, Class, Context, FromIteratorJs, FromJs, Function, IntoJs, JsLifetime,
         Object, Runtime,
     };
+
+    #[test]
+    fn class_check_preserves_pending_exception() {
+        test_with(|ctx| {
+            let object = Object::new(ctx.clone()).unwrap();
+            assert!(object.as_class::<Vec3>().is_none());
+            assert!(!ctx.has_exception());
+            ctx.throw(crate::Value::new_int(ctx.clone(), 42));
+            assert!(object.as_class::<Vec3>().is_none());
+            assert_eq!(ctx.catch().as_int(), Some(42));
+        });
+    }
 
     /// Test circular references.
     #[test]

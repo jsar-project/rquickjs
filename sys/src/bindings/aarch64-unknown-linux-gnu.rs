@@ -1654,6 +1654,12 @@ unsafe extern "C" {
     ) -> ::core::ffi::c_int;
 }
 unsafe extern "C" {
+    pub fn JS_SetContinuationPreservedEmbedderData(rt: *mut JSRuntime, data: JSValue);
+}
+unsafe extern "C" {
+    pub fn JS_GetContinuationPreservedEmbedderData(rt: *mut JSRuntime) -> JSValue;
+}
+unsafe extern "C" {
     pub fn JS_IsJobPending(rt: *mut JSRuntime) -> bool;
 }
 unsafe extern "C" {
